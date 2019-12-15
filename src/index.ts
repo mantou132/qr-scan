@@ -1,20 +1,145 @@
-import { html, GemElement } from '@mantou/gem';
+import { GemElement, customElement, attribute, emitter, html } from '@mantou/gem';
 
-import './elements/switch';
-
-import('./crate/pkg');
-
-class Lib extends GemElement {
-  render() {
-    return html`
-      <style>
-        lib-switch {
-          margin-top: 5em;
-        }
-      </style>
-      <lib-switch></lib-switch>
-    `;
-  }
+interface State {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-customElements.define('lib-root', Lib);
+/**
+ * @attr width
+ * @attr height
+ * @attr type
+ * @attr bound
+ * @fires success
+ * @fires detected
+ * @slot video
+ */
+@customElement('qr-scan')
+export class QrScan extends GemElement<State> {
+  @attribute width: string;
+  @attribute height: string;
+  @attribute type: 'url';
+  @attribute bound: string;
+  @emitter success: (result: string) => void;
+  @emitter detected: (result: string) => void;
+
+  _timer = 0;
+
+  state = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  };
+
+  constructor(width?: number, height?: number) {
+    super();
+    if (width) this.width = String(width);
+    if (height) this.height = String(height);
+  }
+
+  get videoElement(): HTMLVideoElement | null {
+    const slot = this.shadowRoot?.querySelector('slot[name=video]') as HTMLSlotElement;
+    return slot.assignedElements()?.[0] as HTMLVideoElement;
+  }
+
+  detect = async (data: ImageData) => {
+    if (!this.width && !this.height) throw new Error('`width` or `height` does not exist');
+    const { QrDetector } = await import('./crate/pkg');
+    const detector = QrDetector.new(Number(this.width), Number(this.height));
+    return detector.detect(new Uint8Array(data.data));
+  };
+
+  private init = async () => {
+    if (!this.width && !this.height) return;
+    const { QrDetector } = await import('./crate/pkg');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'user',
+      },
+    });
+    let video: HTMLVideoElement;
+    if (this.videoElement) {
+      video = this.videoElement;
+    } else {
+      video = document.createElement('video');
+    }
+    const canvas = document.createElement('canvas');
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) throw new Error('canvas context error');
+    video.srcObject = stream;
+    await video.play();
+    const width = Number(this.width);
+    const height = Number(this.height);
+    const x = (video.videoWidth - width) / 2;
+    const y = (video.videoHeight - height) / 2;
+    const scale = video.clientWidth / video.videoWidth;
+    this.setState({ x: x * scale, y: y * scale, width: width * scale, height: height * scale });
+    canvas.width = width;
+    canvas.height = height;
+    const detector = QrDetector.new(width, height);
+    const tick = async () => {
+      try {
+        ctx.drawImage(video, x, y, width, height, 0, 0, width, height);
+        const buffer = ctx.getImageData(0, 0, width, height).data;
+        const result = detector.detect(new Uint8Array(buffer));
+        this.detected(result);
+        if (result && this.valid(result)) this.success(result);
+      } finally {
+        this._timer = requestAnimationFrame(tick);
+      }
+    };
+    this._timer = requestAnimationFrame(tick);
+  };
+
+  valid(str: string) {
+    let type = this.type;
+    if (!type) {
+      if (str.startsWith('http')) {
+        type = 'url';
+      }
+    }
+    switch (type) {
+      case 'url':
+        try {
+          new URL(str);
+          return true;
+        } catch {
+          return false;
+        }
+      default:
+        return true;
+    }
+  }
+
+  mounted = this.init;
+
+  attributeChanged() {
+    cancelAnimationFrame(this._timer);
+    this.init();
+  }
+
+  render = () => html`
+    <style>
+      :host {
+        position: relative;
+        display: block;
+      }
+      .bound {
+        position: absolute;
+        outline: 2px solid;
+        width: ${this.state.width}px;
+        height: ${this.state.height}px;
+        left: ${this.state.x}px;
+        top: ${this.state.y}px;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+    <slot name="video"></slot>
+    <div ?hidden=${!this.bound} part="bound" class="bound"></div>
+  `;
+}

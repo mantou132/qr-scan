@@ -30,6 +30,7 @@ module.exports = {
   },
   plugins: [
     new WasmPackPlugin({
+      forceMode: 'production',
       crateDirectory: path.resolve(__dirname, 'src/crate'),
       outDir: path.resolve(__dirname, 'src/crate/pkg'),
     }),
