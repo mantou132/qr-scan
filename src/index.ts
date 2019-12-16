@@ -15,15 +15,17 @@ interface State {
  * @fires success
  * @fires detected
  * @slot video
+ * @slot notallow
  */
 @customElement('qr-scan')
-export class QrScan extends GemElement<State> {
+export default class QrScan extends GemElement<State> {
   @attribute width: string;
   @attribute height: string;
   @attribute type: 'url';
   @attribute bound: string;
   @emitter success: (result: string) => void;
   @emitter detected: (result: string) => void;
+  @emitter notallow: Function;
 
   _timer = 0;
 
@@ -52,15 +54,21 @@ export class QrScan extends GemElement<State> {
     return detector.detect(new Uint8Array(data.data));
   };
 
-  private init = async () => {
+  init = async () => {
     if (!this.width && !this.height) return;
     const { QrDetector } = await import('./crate/pkg');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: 'environment',
-      },
-    });
+    let stream: MediaStream;
     let video: HTMLVideoElement;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+        },
+      });
+    } catch (err) {
+      this.notallow(err);
+      throw err;
+    }
     if (this.videoElement) {
       video = this.videoElement;
     } else {
@@ -96,13 +104,7 @@ export class QrScan extends GemElement<State> {
   };
 
   valid(str: string) {
-    let type = this.type;
-    if (!type) {
-      if (str.startsWith('http')) {
-        type = 'url';
-      }
-    }
-    switch (type) {
+    switch (this.type) {
       case 'url':
         try {
           new URL(str);
