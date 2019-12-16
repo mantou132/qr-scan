@@ -57,7 +57,7 @@ export class QrScan extends GemElement<State> {
     const { QrDetector } = await import('./crate/pkg');
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        facingMode: 'user',
+        facingMode: 'environment',
       },
     });
     let video: HTMLVideoElement;
@@ -70,9 +70,10 @@ export class QrScan extends GemElement<State> {
     const ctx = canvas?.getContext('2d');
     if (!ctx) throw new Error('canvas context error');
     video.srcObject = stream;
+    video.setAttribute('playsinline', '');
     await video.play();
-    const width = Number(this.width);
-    const height = Number(this.height);
+    const width = Math.min(Number(this.width), video.videoWidth);
+    const height = Math.min(Number(this.height), video.videoHeight);
     const x = (video.videoWidth - width) / 2;
     const y = (video.videoHeight - height) / 2;
     const scale = video.clientWidth / video.videoWidth;
@@ -126,6 +127,7 @@ export class QrScan extends GemElement<State> {
       :host {
         position: relative;
         display: block;
+        overflow: hidden;
       }
       .bound {
         position: absolute;
@@ -140,6 +142,6 @@ export class QrScan extends GemElement<State> {
       }
     </style>
     <slot name="video"></slot>
-    <div ?hidden=${!this.bound} part="bound" class="bound"></div>
+    <div ?hidden=${!this.bound || !this.state.width || !this.state.height} part="bound" class="bound"></div>
   `;
 }

@@ -13,7 +13,6 @@ const init = (result: string) => {
           width: 640px;
         }
         qr-scan {
-          height: 360px;
           margin-bottom: 30px;
         }
         video {
