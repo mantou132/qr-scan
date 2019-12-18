@@ -14,8 +14,8 @@ interface State {
  * @attr bound
  * @fires success
  * @fires detected
+ * @fires notallow
  * @slot video
- * @slot notallow
  */
 @customElement('qr-scan')
 export default class QrScan extends GemElement<State> {
@@ -47,14 +47,14 @@ export default class QrScan extends GemElement<State> {
     return slot.assignedElements()?.[0] as HTMLVideoElement;
   }
 
-  detect = async (data: ImageData) => {
+  async detect(data: ImageData) {
     if (!this.width && !this.height) throw new Error('`width` or `height` does not exist');
     const { QrDetector } = await import('./crate/pkg');
     const detector = QrDetector.new(Number(this.width), Number(this.height));
     return detector.detect(new Uint8Array(data.data));
-  };
+  }
 
-  init = async () => {
+  async init() {
     if (!this.width && !this.height) return;
     const { QrDetector } = await import('./crate/pkg');
     let stream: MediaStream;
@@ -101,9 +101,9 @@ export default class QrScan extends GemElement<State> {
       }
     };
     this._timer = requestAnimationFrame(tick);
-  };
+  }
 
-  valid(str: string) {
+  private valid(str: string) {
     switch (this.type) {
       case 'url':
         try {
@@ -117,33 +117,37 @@ export default class QrScan extends GemElement<State> {
     }
   }
 
-  mounted = this.init;
+  mounted() {
+    this.init();
+  }
 
   attributeChanged() {
     cancelAnimationFrame(this._timer);
     this.init();
   }
 
-  render = () => html`
-    <style>
-      :host {
-        position: relative;
-        display: block;
-        overflow: hidden;
-      }
-      .bound {
-        position: absolute;
-        outline: 2px solid;
-        width: ${this.state.width}px;
-        height: ${this.state.height}px;
-        left: ${this.state.x}px;
-        top: ${this.state.y}px;
-      }
-      [hidden] {
-        display: none;
-      }
-    </style>
-    <slot name="video"></slot>
-    <div ?hidden=${!this.bound || !this.state.width || !this.state.height} part="bound" class="bound"></div>
-  `;
+  render() {
+    return html`
+      <style>
+        :host {
+          position: relative;
+          display: block;
+          overflow: hidden;
+        }
+        .bound {
+          position: absolute;
+          outline: 2px solid;
+          width: ${this.state.width}px;
+          height: ${this.state.height}px;
+          left: ${this.state.x}px;
+          top: ${this.state.y}px;
+        }
+        [hidden] {
+          display: none;
+        }
+      </style>
+      <slot name="video"></slot>
+      <div ?hidden=${!this.bound || !this.state.width || !this.state.height} part="bound" class="bound"></div>
+    `;
+  }
 }
